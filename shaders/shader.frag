@@ -1,10 +1,12 @@
 uniform float uf_time;
+uniform float uf_fft[2048];
 uniform vec2 uv2_res;
 varying vec2 vv2_pos;
 
 float world(vec3 p)
 {
-    return min(length(p) - 1. + 0.1*sin(uf_time + 7.*(p.x+p.y-p.z)), p.y + 1.);
+    return min(length(p) - 1. + 0.0000002*(abs(uf_fft[5]))*sin(uf_time + 7.*(p.x-p.y+p.z)), p.y + 1.);
+    //return min(length(p) - 1. + 0.0000001*uf_fft, p.y + 1.);
 }
 
 float trace(vec3 O, vec3 D, float L)

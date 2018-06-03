@@ -28,6 +28,8 @@ LIBS+=-lXi
 LIBS+=-lXinerama
 LIBS+=-lX11
 LIBS+=-lexpat
+LIBS+=-pthread
+LIBS+=-D_REENTRANT -lpulse-simple -lpulse -lfftw3
 
 TARGET=main
 

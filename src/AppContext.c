@@ -8,7 +8,25 @@
 #define GLEW STATIC
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <pulse/simple.h>
+#include <pulse/mainloop.h>
+#include <pulse/error.h>
+#include <pulse/pulseaudio.h>
+#include <pthread.h>
+#include <fftw3.h>
 
+#define M 2048
+int sourceIsAuto = 1;
+int thr_id;
+pthread_t p_thread;
+fftw_complex outl[M / 2 + 1][2];
+fftw_complex outr[M / 2 + 1][2];
+double inl[2 * (M / 2 + 1)];
+double inr[2 * (M / 2 + 1)];
+fftw_plan pl;
+fftw_plan pr;
+
+#include "pulse.h"
 #include "AppContext.h"
 #include "ConsoleColor.h"
 
@@ -27,10 +45,12 @@ AppContext *new_AppContext()
 static void initGLFW(AppContext *app);
 static void initGLEW(AppContext *app);
 static void initVAO(AppContext *app);
+static void initPulseAudio(AppContext *app);
 static void loadShaders(AppContext *app);
+static void unloadShaders(AppContext *app);
 static void compileShaders(AppContext *app);
 static GLuint compileShader(const GLchar *vertSource, const GLchar *fragSource);
-static const char *textFileRead(const char *filename);
+static char *textFileRead(const char *filename);
 static int fileIsModified(const char *name, time_t oldMTime);
 static time_t getTimeModified(const char *name);
 
@@ -43,6 +63,7 @@ void AppContext_init(AppContext *app)
     initVAO(app);
     loadShaders(app);
     compileShaders(app);
+    initPulseAudio(app);
 }
 
 static void initGLFW(AppContext *app)
@@ -115,6 +136,12 @@ static void loadShaders(AppContext *app)
         = textFileRead(app->fragmentShaderName);
 }
 
+static void unloadShaders(AppContext *app)
+{
+    free(app->modelVertexShaderSource);
+    free(app->modelFragmentShaderSource);
+}
+
 static void compileShaders(AppContext *app)
 {
     app->shader = compileShader(app->modelVertexShaderSource,
@@ -172,40 +199,85 @@ void AppContext_loop(AppContext *app)
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glEnable(GL_MULTISAMPLE);
     int width, height;
-    float av2_pos[] = {0.0, 0.0};
     float *uv2_res = malloc(2 * sizeof(float));
     while(!glfwWindowShouldClose(app->window))
     {
-        glfwGetWindowSize(app->window, &width, &height);
-        glViewport(0, 0, width, height);
-        uv2_res[0] = width;
-        uv2_res[1] = height;
         if (fileIsModified(app->vertexShaderName, app->vertexShaderModTime) ||
             fileIsModified(app->fragmentShaderName, app->fragmentShaderModTime)) {
             app->vertexShaderModTime = getTimeModified(app->vertexShaderName);
             app->fragmentShaderModTime = getTimeModified(app->fragmentShaderName);
+            unloadShaders(app);
             loadShaders(app);
             compileShaders(app);
+            glUseProgram(app->shader);
         }
+        glfwGetWindowSize(app->window, &width, &height);
+        uv2_res[0] = width;
+        uv2_res[1] = height;
+        glViewport(0, 0, width, height);
         GLfloat currentFrame = glfwGetTime();
         app->deltaTime = currentFrame - app->lastFrame;
         app->lastFrame = currentFrame;
+        for (int i = 0; i < M; ++i) {
+            inl[i] = app->audio.audio_out_l[i];
+            inr[i] = app->audio.audio_out_r[i];
+        }
+        float out_uf_l[M];
+        //float out_uf_r[M];
+        for (int i = 0; i < M; ++i) {
+            out_uf_l[i] = outl[i][0][0];
+        //    out_uf_r[i] = outr[i][0][0];
+        }
+        fftw_execute(pl);
+        fftw_execute(pr);
+        glUniform2fv(glGetUniformLocation(app->shader, "uv2_res"), 1, uv2_res);
+        glUniform1f(glGetUniformLocation(app->shader, "uf_time"), currentFrame);
+        glUniform1fv(glGetUniformLocation(app->shader, "uf_fft"), M, out_uf_l);
         glfwPollEvents();
         glClear(GL_COLOR_BUFFER_BIT |
                 GL_DEPTH_BUFFER_BIT |
                 GL_STENCIL_BUFFER_BIT);
-        glUseProgram(app->shader);
-        glUniform1f(glGetUniformLocation(app->shader, "uf_time"), glfwGetTime());
-        glUniform2fv(glGetUniformLocation(app->shader, "av2_pos"), 1, av2_pos);
-        glUniform2fv(glGetUniformLocation(app->shader, "uv2_res"), 1, uv2_res);
         glBindVertexArray(app->VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
         glfwSwapBuffers(app->window);
     }
+    free(uv2_res);
 }
+
+static void initPulseAudio(AppContext *app)
+{
+    //input: init
+    app->audio.source = malloc(1 +  strlen("auto"));
+    strcpy(app->audio.source, "auto");
+
+    app->audio.format = -1;
+    app->audio.rate = 0;
+    app->audio.terminate = 0;
+    app->audio.channels = 2;
+
+    for (int i = 0; i < M; i++) {
+        app->audio.audio_out_l[i] = 0;
+        app->audio.audio_out_r[i] = 0;
+    }
+
+    if (strcmp(app->audio.source, "auto") == 0) {
+        getPulseDefaultSink((void*)&app->audio);
+        sourceIsAuto = 1;
+    } else
+        sourceIsAuto = 0;
+    //starting pulsemusic listener
+    thr_id = pthread_create(&p_thread, NULL, input_pulse, (void*)&app->audio);
+    app->audio.rate = 44100;
+    //fft: planning to rock
+    pl = fftw_plan_dft_r2c_1d(M, inl, *outl, FFTW_MEASURE);
+    pr = fftw_plan_dft_r2c_1d(M, inr, *outr, FFTW_MEASURE);
+
+}
+
 void AppContext_terminate(AppContext *app)
 {
+    glfwDestroyWindow(app->window);
     glfwTerminate();
 }
 
@@ -214,10 +286,12 @@ void destroy_AppContext(AppContext *app)
     glDeleteVertexArrays(1, &app->VAO);
     glDeleteBuffers(1, &app->VBO);
     glDeleteBuffers(1, &app->IBO);
+    unloadShaders(app);
+
     free(app);
 }
 
-static const char *textFileRead(const char *filename){
+static char *textFileRead(const char *filename){
     FILE *fp;
     char *textFile;
     int textFileSize;
@@ -241,9 +315,8 @@ static int fileIsModified(const char *name, time_t oldMTime)
 {
     struct stat file_stat;
     int err = stat(name, &file_stat);
-    if (err != 0) {
+    if (err != 0)
         return 0;
-    }
     return file_stat.st_mtime > oldMTime;
 }
 
@@ -251,8 +324,7 @@ static time_t getTimeModified(const char *name)
 {
     struct stat file_stat;
     int err = stat(name, &file_stat);
-    if (err != 0) {
+    if (err != 0)
         return 0;
-    }
     return file_stat.st_mtime;
 }

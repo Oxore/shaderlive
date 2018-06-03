@@ -7,12 +7,15 @@ typedef struct AppContext {
     const char *fragmentShaderName;
     time_t vertexShaderModTime;
     time_t fragmentShaderModTime;
-    const GLchar *modelVertexShaderSource;
-    const GLchar *modelFragmentShaderSource;
+    GLchar *modelVertexShaderSource;
+    GLchar *modelFragmentShaderSource;
     GLuint shader;
     GLuint VAO;
     GLuint VBO;
     GLuint IBO;
+
+    struct audio_data audio;
+    struct config_params p;
 
     GLfloat deltaTime;    // Time between current frame and last frame
     GLfloat lastFrame;   // Time of last frame

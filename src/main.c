@@ -3,12 +3,16 @@
 #include <time.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <pulse/pulseaudio.h>
+#include <pulse/simple.h>
 
+#include "pulse.h"
 #include "AppContext.h"
 
 AppContext *app;
 
 int main(int argc, char **argv) {
+
     app = new_AppContext();
     app->windowName = "Shader livecoding tool";
     app->windowWidth = 800;
