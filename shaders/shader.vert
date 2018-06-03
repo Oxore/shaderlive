@@ -1,5 +1,6 @@
 uniform float uf_time;
-uniform float uf_fft[2048];
+uniform float uf_fft_l[464];
+uniform float uf_fft_r[464];
 attribute vec2 av2_pos;
 varying vec2 vv2_pos;
 

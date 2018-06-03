@@ -1,30 +1,25 @@
 uniform float uf_time;
-uniform float uf_fft[2048];
+uniform float uf_fft_l[464];
+uniform float uf_fft_r[464];
 uniform vec2 uv2_res;
 varying vec2 vv2_pos;
 
-float world(vec3 p)
-{
-    return min(length(p) - 1. + 0.0000002*(abs(uf_fft[5]))*sin(uf_time + 7.*(p.x-p.y+p.z)), p.y + 1.);
-    //return min(length(p) - 1. + 0.0000001*uf_fft, p.y + 1.);
-}
+float reducer = 0.0000001;
+int numlines = 232; //464 lines for 20 kHz, 232 to skip every seceond line
 
-float trace(vec3 O, vec3 D, float L)
+float eq()
 {
-    for (int i = 0; i < 32; i++) {
-        vec3 p = O + D * L;
-        float d = world(p);
-        L += d;
-        if (d < .001) break;
-    }
-    return L;
+    for (int i = -numlines; i < numlines; ++i)
+        if (vv2_pos.x <= float(i)/float(numlines))
+            if (i < 0)
+                return uf_fft_l[-i * 2] * exp(float(-i) * 0.001);
+            else
+                return uf_fft_r[i * 2] * exp(float(i) * 0.001);
+    return 0.;
 }
 
 void main()
 {
-    vec2 p = vv2_pos * vec2(1., uv2_res.y / uv2_res.x);
-    vec3 o = vec3(0., 0., 3.);
-    vec3 d = normalize(vec3(p, -1.));
-    float l = trace(o, d, 0.);
-    gl_FragColor = vec4(l/10.);
+    vec2 my_offset = vv2_pos * vec2(1., uv2_res.y / uv2_res.x);
+    gl_FragColor = vec4(vec3(abs(sin(eq() * reducer)) * abs(1./my_offset.y)), 0.);
 }

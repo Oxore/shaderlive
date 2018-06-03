@@ -222,17 +222,18 @@ void AppContext_loop(AppContext *app)
             inl[i] = app->audio.audio_out_l[i];
             inr[i] = app->audio.audio_out_r[i];
         }
-        float out_uf_l[M];
-        //float out_uf_r[M];
-        for (int i = 0; i < M; ++i) {
-            out_uf_l[i] = outl[i][0][0];
-        //    out_uf_r[i] = outr[i][0][0];
+        float out_uf_l[M / 2 + 1];
+        float out_uf_r[M / 2 + 1];
+        for (int i = 0; i < M / 2 + 1; ++i) {
+            out_uf_l[i] = (float) outl[i][0][0];
+            out_uf_r[i] = (float) outr[i][0][0];
         }
         fftw_execute(pl);
         fftw_execute(pr);
         glUniform2fv(glGetUniformLocation(app->shader, "uv2_res"), 1, uv2_res);
         glUniform1f(glGetUniformLocation(app->shader, "uf_time"), currentFrame);
-        glUniform1fv(glGetUniformLocation(app->shader, "uf_fft"), M, out_uf_l);
+        glUniform1fv(glGetUniformLocation(app->shader, "uf_fft_l"), M, out_uf_l);
+        glUniform1fv(glGetUniformLocation(app->shader, "uf_fft_r"), M, out_uf_r);
         glfwPollEvents();
         glClear(GL_COLOR_BUFFER_BIT |
                 GL_DEPTH_BUFFER_BIT |
