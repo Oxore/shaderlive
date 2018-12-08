@@ -4,7 +4,6 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include <SOIL/SOIL.h>
 #define GLEW STATIC
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>

@@ -1,4 +1,3 @@
-#include <SOIL/SOIL.h>
 #define GLEW STATIC
 #include <time.h>
 #include <GL/glew.h>

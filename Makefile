@@ -14,7 +14,6 @@ CFLAGS+=-O0
 CFLAGS+=-g
 CFLAGS+=$(INCLUDE)
 
-LIBS+=-lSOIL
 LIBS+=-lm
 LIBS+=-lglfw
 LIBS+=-pthread
