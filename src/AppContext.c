@@ -13,10 +13,10 @@
 #include <pulse/pulseaudio.h>
 #include <pthread.h>
 #include <fftw3.h>
+#include <semaphore.h>
 
 #define M 2048
 int sourceIsAuto = 1;
-int thr_id;
 pthread_t p_thread;
 fftw_complex outl[M / 2 + 1][2];
 fftw_complex outr[M / 2 + 1][2];
@@ -90,10 +90,12 @@ static void initGLFW(AppContext *app)
 
 static void initGLEW(AppContext *app)
 {
+    (void) app;
+
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) {
         printf(A_RED "Error: " A_RESET "Failed to initialize GLEW\n");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
     glClearDepth(1.0f);
     glEnable(GL_DEPTH_TEST);
@@ -129,10 +131,8 @@ static void initVAO(AppContext *app)
 
 static void loadShaders(AppContext *app)
 {
-    app->modelVertexShaderSource
-        = textFileRead(app->vertexShaderName);
-    app->modelFragmentShaderSource
-        = textFileRead(app->fragmentShaderName);
+    app->modelVertexShaderSource = textFileRead(app->vertexShaderName);
+    app->modelFragmentShaderSource = textFileRead(app->fragmentShaderName);
 }
 
 static void unloadShaders(AppContext *app)
@@ -217,10 +217,14 @@ void AppContext_loop(AppContext *app)
         GLfloat currentFrame = glfwGetTime();
         app->deltaTime = currentFrame - app->lastFrame;
         app->lastFrame = currentFrame;
+
+        sem_wait(&app->audio.semaphore);
         for (int i = 0; i < M; ++i) {
             inl[i] = app->audio.audio_out_l[i];
             inr[i] = app->audio.audio_out_r[i];
         }
+        sem_post(&app->audio.semaphore);
+
         float out_uf_l[M / 2 + 1];
         float out_uf_r[M / 2 + 1];
         for (int i = 0; i < M / 2 + 1; ++i) {
@@ -248,13 +252,16 @@ void AppContext_loop(AppContext *app)
 static void initPulseAudio(AppContext *app)
 {
     //input: init
-    app->audio.source = malloc(1 +  strlen("auto"));
+    app->audio.source = malloc(strlen("auto") + 1);
     strcpy(app->audio.source, "auto");
+
+    app->audio.error_message = malloc(BUFSIZ * sizeof(char));
 
     app->audio.format = -1;
     app->audio.rate = 0;
     app->audio.terminate = 0;
     app->audio.channels = 2;
+    sem_init(&app->audio.semaphore, 0, 1);
 
     for (int i = 0; i < M; i++) {
         app->audio.audio_out_l[i] = 0;
@@ -264,25 +271,32 @@ static void initPulseAudio(AppContext *app)
     if (strcmp(app->audio.source, "auto") == 0) {
         getPulseDefaultSink((void*)&app->audio);
         sourceIsAuto = 1;
-    } else
+    } else {
         sourceIsAuto = 0;
+    }
     //starting pulsemusic listener
-    thr_id = pthread_create(&p_thread, NULL, input_pulse, (void*)&app->audio);
+    pthread_create(&p_thread, NULL, input_pulse, (void*)&app->audio);
     app->audio.rate = 44100;
-    //fft: planning to rock
+
     pl = fftw_plan_dft_r2c_1d(M, inl, *outl, FFTW_MEASURE);
     pr = fftw_plan_dft_r2c_1d(M, inr, *outr, FFTW_MEASURE);
-
 }
 
 void AppContext_terminate(AppContext *app)
 {
+    sem_wait(&app->audio.semaphore);
+    app->audio.terminate = 1;
+    sem_post(&app->audio.semaphore);
+    void *res = NULL;
+    pthread_join(p_thread, &res);
     glfwDestroyWindow(app->window);
     glfwTerminate();
 }
 
 void destroy_AppContext(AppContext *app)
 {
+    sem_destroy(&app->audio.semaphore);
+    free(app->audio.error_message);
     glDeleteVertexArrays(1, &app->VAO);
     glDeleteBuffers(1, &app->VBO);
     glDeleteBuffers(1, &app->IBO);

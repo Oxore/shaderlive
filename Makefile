@@ -1,5 +1,5 @@
 MAKE=make --no-print-directory
-CC=gcc
+Q=@
 
 BUILD:=build
 SRC:=src
@@ -7,9 +7,16 @@ INCLUDE+=include
 INCLUDE:=$(patsubst %,-I%,$(INCLUDE))
 SOURCES:=$(wildcard $(SRC)/*.c)
 OBJECTS:=$(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(SOURCES))
+DEPENDS:=$(OBJECTS:.o=.d)
 
+#COMMON+=-fsanitize=thread
+
+CFLAGS+=$(COMMON)
 CFLAGS+=-Wall
+CFLAGS+=-Wextra
+CFLAGS+=-Wpedantic
 CFLAGS+=-std=c11
+CFLAGS+=-MD
 CFLAGS+=-O0
 CFLAGS+=-g
 CFLAGS+=$(INCLUDE)
@@ -30,25 +37,28 @@ LIBS+=-lexpat
 LIBS+=-pthread
 LIBS+=-D_REENTRANT -lpulse-simple -lpulse -lfftw3
 
+LDFLAGS+=$(COMMON)
+LDFLAGS+=$(LIBS)
+
 TARGET=main
 
 all: $(TARGET)
-	@echo "Compilation successfull"
 
 $(TARGET): $(OBJECTS)
-	@echo "Compiling: $@"
-	@$(CC) $(CFLAGS) $(LIBS) $^ $(MODOBJ) -o $@
+	@echo "  LD      $@"
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $^ $(MODOBJ) -o $@
 
 $(OBJECTS): | $(BUILD)
 
 $(BUILD):
-	@mkdir -p $(BUILD)
+	$(Q)mkdir -p $(BUILD)
 
 $(BUILD)/%.o: $(SRC)/%.c
-	@echo "Compiling: $@"
-	@$(CC) -c $(CFLAGS) $(LIBS) -o $@ $<
+	@echo "  CC      $@"
+	$(Q)$(CC) -c $(CFLAGS) -o $@ $<
 
 clean:
-	@rm -rfv main $(BUILD)
+	$(Q)rm -rfv main $(BUILD)
 
+-include $(DEPENDS)
 .PHONY: all clean
