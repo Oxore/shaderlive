@@ -15,7 +15,6 @@ typedef struct AppContext {
     GLuint IBO;
 
     struct audio_data audio;
-    struct config_params p;
 
     GLfloat deltaTime;    // Time between current frame and last frame
     GLfloat lastFrame;   // Time of last frame

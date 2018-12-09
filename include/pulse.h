@@ -12,17 +12,5 @@ struct audio_data {
     char *error_message;
 };
 
-struct config_params {
-    char *color, *bcolor, *raw_target, *audio_source, *gradient_color_1,
-         *gradient_color_2, *data_format;
-    char bar_delim, frame_delim ;
-    double monstercat, integral, gravity, ignore, sens;
-    unsigned int lowcf, highcf;
-    double *smooth;
-    int smcount, customEQ, im, om, col, bgcol, autobars, stereo, is_bin,
-        ascii_range, bit_format, gradient, fixedbars, framerate, bw, bs,
-        autosens, overshoot, waves;
-};
-
 void   *input_pulse(void* data);
 void    getPulseDefaultSink();
